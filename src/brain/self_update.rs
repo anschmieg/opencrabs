@@ -50,7 +50,12 @@ impl SelfUpdater {
 
         loop {
             if search_dir.join("Cargo.toml").exists() {
-                let binary_path = search_dir.join("target").join("release").join("opencrabs");
+                let bin_name = if crate::IS_FULL_BUILD {
+                    "opencrabs-full"
+                } else {
+                    "opencrabs"
+                };
+                let binary_path = search_dir.join("target").join("release").join(bin_name);
                 return Ok(Self {
                     project_root: search_dir,
                     binary_path,
@@ -93,7 +98,12 @@ impl SelfUpdater {
             }
         }
 
-        let binary_path = source_dir.join("target").join("release").join("opencrabs");
+        let bin_name = if crate::IS_FULL_BUILD {
+            "opencrabs-full"
+        } else {
+            "opencrabs"
+        };
+        let binary_path = source_dir.join("target").join("release").join(bin_name);
 
         Ok(Self {
             project_root: source_dir,

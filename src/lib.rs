@@ -73,6 +73,8 @@ pub use error::{ErrorCode, OpenCrabsError};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Whether this binary includes local STT/TTS (full build variant).
+pub const IS_FULL_BUILD: bool = cfg!(all(feature = "local-stt", feature = "local-tts"));
 /// Package authors
 pub const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 /// Package description

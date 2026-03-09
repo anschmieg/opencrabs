@@ -92,6 +92,10 @@ pub enum Commands {
         #[command(subcommand)]
         operation: CronCommands,
     },
+
+    /// Internal health check — prints "ok" and exits (used by /evolve)
+    #[command(hide = true)]
+    HealthCheck,
 }
 
 #[derive(Subcommand, Debug)]
@@ -259,6 +263,10 @@ pub async fn run() -> Result<()> {
         }) => commands::cmd_run(&config, prompt, auto_approve, format).await,
         Some(Commands::Daemon) => ui::cmd_daemon(&config).await,
         Some(Commands::Cron { operation }) => cron::cmd_cron(&config, operation).await,
+        Some(Commands::HealthCheck) => {
+            println!("ok");
+            Ok(())
+        }
     }
 }
 
