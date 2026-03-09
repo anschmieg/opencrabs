@@ -24,7 +24,7 @@ jobs:
         run: cargo publish --allow-dirty
 
   build-release:
-    name: Build Release
+    name: Build Release (${{ matrix.variant }}, ${{ matrix.asset_suffix }})
     needs: publish-crate
     runs-on: ${{ matrix.os }}
     permissions:
@@ -32,30 +32,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        variant: [default, full]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: opencrabs
             asset_suffix: linux-amd64
 
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: opencrabs
             asset_suffix: linux-arm64
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: opencrabs.exe
             asset_suffix: windows-amd64
 
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: opencrabs
             asset_suffix: macos-amd64
 
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: opencrabs
             asset_suffix: macos-arm64
 
     steps:
@@ -99,39 +95,73 @@ jobs:
           CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8-a+crypto' || '' }}
           # aws-lc-sys needs cmake builder on Windows MSVC to avoid __builtin_bswap errors
           AWS_LC_SYS_CMAKE_BUILDER: ${{ matrix.os == 'windows-latest' && '1' || '' }}
-        run: cargo build --release --target ${{ matrix.target }} --all-features
+        shell: bash
+        run: |
+          if [ "${{ matrix.variant }}" = "full" ]; then
+            cargo build --release --target ${{ matrix.target }} --all-features
+          else
+            cargo build --release --target ${{ matrix.target }} --features telegram,whatsapp,discord,slack,trello
+          fi
+
+      - name: Rename binary for full variant
+        if: matrix.variant == 'full'
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp opencrabs.exe opencrabs-full.exe
+          else
+            cp opencrabs opencrabs-full
+          fi
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-latest'
+        shell: bash
         run: |
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          if [ "${{ matrix.variant }}" = "full" ]; then
+            BINARY="opencrabs-full"
           else
-            strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+            BINARY="opencrabs"
+          fi
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${BINARY}
+          else
+            strip target/${{ matrix.target }}/release/${BINARY}
           fi
 
       - name: Create archive
         shell: bash
         run: |
-          ASSET_NAME="opencrabs-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}"
+          if [ "${{ matrix.variant }}" = "full" ]; then
+            PREFIX="opencrabs-full"
+            BINARY="opencrabs-full"
+          else
+            PREFIX="opencrabs"
+            BINARY="opencrabs"
+          fi
+          ASSET_NAME="${PREFIX}-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}"
           cd target/${{ matrix.target }}/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a ../../../${ASSET_NAME}.zip ${{ matrix.artifact_name }}
+            BINARY="${BINARY}.exe"
+            7z a ../../../${ASSET_NAME}.zip ${BINARY}
           else
-            tar czf ../../../${ASSET_NAME}.tar.gz ${{ matrix.artifact_name }}
+            tar czf ../../../${ASSET_NAME}.tar.gz ${BINARY}
           fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencrabs-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}
+          name: ${{ matrix.variant == 'full' && 'opencrabs-full' || 'opencrabs' }}-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}
           path: |
             opencrabs-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}.tar.gz
             opencrabs-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}.zip
+            opencrabs-full-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}.tar.gz
+            opencrabs-full-v${{ steps.version.outputs.version }}-${{ matrix.asset_suffix }}.zip
 
   create-release:
     name: Create Release
     needs: build-release
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
