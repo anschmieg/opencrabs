@@ -1,0 +1,88 @@
+name: Notify on Safe Evolve
+
+on:
+  schedule:
+    - cron: "0 9,18 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check and notify
+        run: |
+          python3 << 'PYEOF'
+          import os, urllib.request, json, subprocess
+
+          token = os.environ["GH_TOKEN"]
+          headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+
+          def gh(endpoint):
+              req = urllib.request.Request(f"https://api.github.com{endpoint}", headers=headers)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read())
+
+          # 1. Get latest release
+          release = gh("/repos/adolfousier/opencrabs/releases/latest")
+          latest_tag = release["tag_name"]
+          latest_published = release["published_at"]
+          print(f"Latest release: {latest_tag} ({latest_published})")
+
+          # 2. Get most recently updated PR by anschmieg
+          pulls = gh("/repos/adolfousier/opencrabs/pulls?state=all&per_page=5&sort=updated&direction=desc")
+          my_prs = [p for p in pulls if p["user"]["login"] == "anschmieg"]
+
+          should_notify = False
+          reason = ""
+
+          if not my_prs:
+              print("Case B: no PR by user")
+              should_notify = True
+              reason = "no active PR, new release available"
+          else:
+              pr = my_prs[0]
+              pr_created = pr["created_at"]
+              pr_merged_at = pr.get("merged_at")
+              pr_num = pr["number"]
+              print(f"Most recent PR: #{pr_num}, created={pr_created}, merged_at={pr_merged_at}")
+
+              if pr_created > latest_published:
+                  if pr_merged_at is not None:
+                      print("Case A: PR merged. Recommending /evolve.")
+                      should_notify = True
+                      reason = "PR merged, new release available"
+                  else:
+                      print("Case A: PR still open. No action.")
+              else:
+                  print("Case B: PR filed before latest release")
+                  should_notify = True
+                  reason = "no active PR, new release available"
+
+          print(f"should_notify={should_notify}, reason={reason}")
+
+          if should_notify:
+              bearer = "bc4045697a1feecf244e83cf8aeab1342f8e4d37b8330934"
+              message = f"🦀 Release {latest_tag} is out ({reason}). Run /evolve to update."
+              payload = json.dumps({
+                  "jsonrpc": "2.0",
+                  "method": "message/send",
+                  "params": {
+                      "message": {"role": "user", "parts": [{"text": message}]}
+                  },
+                  "id": 1
+              })
+              result = subprocess.run(
+                  ["curl", "-s", "-X", "POST",
+                   "https://agent.nothing.pink/a2a/v1",
+                   "-H", f"Authorization: Bearer {bearer}",
+                   "-H", "Content-Type: application/json",
+                   "-H", "Origin: https://agent.nothing.pink",
+                   "-d", payload],
+                  capture_output=True, text=True
+              )
+              print(f"A2A curl exit: {result.returncode}, stdout: {result.stdout[:200]}")
+          else:
+              print("No notification needed.")
+          PYEOF
