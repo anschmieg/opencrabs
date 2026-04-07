@@ -1,0 +1,33 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Sync with upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/adolfousier/opencrabs.git || true
+          git fetch upstream main
+          git reset --hard upstream/main
+          git push --force origin main
+
+      - name: Restore fork-specific files
+        run: |
+          # Fetch the fork-files branch and restore the workflow file
+          git fetch origin fork-files
+          git show origin/fork-files:.github/workflows/notify-pr-merge.yml > .github/workflows/notify-pr-merge.yml
+          git add .github/workflows/notify-pr-merge.yml
+          git commit -m "chore: restore fork-specific workflow from fork-files branch"
+          git push origin main
