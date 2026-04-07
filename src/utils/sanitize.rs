@@ -90,6 +90,11 @@ fn redact_command(cmd: &str) -> String {
         let mut search_start = 0;
         while let Some(pos) = lower[search_start..].find(pattern) {
             let match_pos = search_start + pos + pattern.len();
+            // `match_pos` can exceed `result.len()` when `to_lowercase()` expanded
+            // the string (e.g. Turkish 'İ' → 'i̇'). Guard before slicing.
+            if match_pos > result.len() {
+                break;
+            }
             // Find end of the secret: whitespace, quote, or end of string
             let secret_end = result[match_pos..]
                 .find(['"', '\'', ' ', '&', '\n'])
@@ -290,6 +295,12 @@ pub fn redact_secrets(text: &str) -> String {
         while let Some(pos) = lower[search_from..].find(&prefix_lower) {
             let abs_pos = search_from + pos;
             let after = abs_pos + prefix.len();
+            // `after` can exceed `result.len()` when `lower.to_lowercase()`
+            // expanded the string (e.g. Turkish 'İ' → 'i̇' adds a combining dot).
+            // Guard the slice to prevent a panic.
+            if after > result.len() {
+                break;
+            }
             // Find end of token: next whitespace, quote, comma, backtick, or end
             let end = result[after..]
                 .find(|c: char| {
