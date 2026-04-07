@@ -56,10 +56,9 @@ jobs:
               pr_ref = f"(#{pr_num})"
               if pr_ref in release_body or f"#{pr_num} " in release_body or f"#{pr_num}\n" in release_body:
                   pr_in_release = True
-                  # Extract the line mentioning the PR
                   for line in release_body.split("\n"):
                       if f"#{pr_num}" in line:
-                          pr_desc = line.strip()
+                          pr_desc = re.sub(r"[*_#`]+", "", line).strip()
                           break
 
               if pr_created > latest_published:
@@ -75,14 +74,14 @@ jobs:
                   if pr_in_release:
                       reason = f"your PR #{pr_num} IS in {latest_tag}"
                   else:
-                      reason = f"your PR #{pr_num} is NOT in {latest_tag} — skipping"
+                      reason = f"your PR #{pr_num} is NOT in {latest_tag}"
 
           print(f"should_notify={should_notify}, reason={reason}")
 
           if should_notify:
               bearer = "bc4045697a1feecf244e83cf8aeab1342f8e4d37b8330934"
               if pr_in_release and pr_desc:
-                  message = f"🦀 {latest_tag} is out — {pr_desc} Run /evolve to update."
+                  message = f"🦀 {latest_tag} is out — your PR #{pr_num} is included: {pr_desc}. Run /evolve to update."
               else:
                   message = f"🦀 {latest_tag} is out ({reason}). Run /evolve to update."
               payload = json.dumps({
